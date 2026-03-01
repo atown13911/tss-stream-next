@@ -1,4 +1,7 @@
-const AUTH_API = 'https://taylor-accesscom-production.up.railway.app/api/v1/auth';
+const SSO_BASE = 'https://taylor-accesscom-production.up.railway.app';
+const SSO_UI = 'https://taylor-access.com';
+const CLIENT_ID = 'ta_tss_stream';
+const CLIENT_SECRET = 'tss-stream-sso-secret-2026';
 const TOKEN_KEY = 'tss_stream_token';
 
 export function getToken(): string | null {
@@ -12,6 +15,8 @@ export function setToken(token: string): void {
 
 export function clearToken(): void {
   localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem('tss_stream_refresh');
+  localStorage.removeItem('sso_state');
 }
 
 export function isTokenExpired(token: string): boolean {
@@ -25,38 +30,47 @@ export function isTokenExpired(token: string): boolean {
   }
 }
 
-export async function login(email: string, password: string): Promise<string> {
-  const res = await fetch(`${AUTH_API}/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
-
-  if (!res.ok) {
-    const data = await res.json().catch(() => null);
-    throw new Error(data?.error || data?.message || 'Authentication failed');
-  }
-
-  const data = await res.json();
-  const token = data.token;
-  if (!token) throw new Error('No token received');
-
-  setToken(token);
-  return token;
+export function redirectToSSO(): void {
+  const redirectUri = encodeURIComponent(window.location.origin + '/callback');
+  const scope = encodeURIComponent('openid profile email roles');
+  const state = encodeURIComponent(Math.random().toString(36).substring(7));
+  localStorage.setItem('sso_state', state);
+  window.location.href = `${SSO_UI}/oauth/authorize?response_type=code&client_id=${CLIENT_ID}&redirect_uri=${redirectUri}&scope=${scope}&state=${state}`;
 }
 
-export async function verifyToken(token: string): Promise<boolean> {
-  try {
-    const res = await fetch(`${AUTH_API}/me`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    return res.ok;
-  } catch {
-    return false;
+export async function exchangeCode(code: string): Promise<string> {
+  const redirectUri = window.location.origin + '/callback';
+
+  const tokenRes = await fetch(`${SSO_BASE}/oauth/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      grantType: 'authorization_code',
+      code,
+      redirectUri,
+      clientId: CLIENT_ID,
+      clientSecret: CLIENT_SECRET,
+    }),
+  });
+
+  if (!tokenRes.ok) {
+    const err = await tokenRes.json().catch(() => null);
+    throw new Error(err?.error_description || err?.error || 'Token exchange failed');
   }
+
+  const data = await tokenRes.json();
+  const accessToken = data.accessToken || data.access_token;
+  const refreshToken = data.refreshToken || data.refresh_token;
+
+  if (!accessToken) throw new Error('No access token received');
+
+  setToken(accessToken);
+  if (refreshToken) localStorage.setItem('tss_stream_refresh', refreshToken);
+
+  return accessToken;
 }
 
 export function logout(): void {
   clearToken();
-  window.location.reload();
+  window.location.href = '/';
 }
