@@ -70,7 +70,28 @@ export async function exchangeCode(code: string): Promise<string> {
   return accessToken;
 }
 
+export function hasValidToken(): boolean {
+  const token = getToken();
+  if (!token) return false;
+  return !isTokenExpired(token);
+}
+
+export async function handleTokenHandoff(token: string): Promise<void> {
+  const res = await fetch(`${SSO_BASE}/oauth/userinfo`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) {
+    throw new Error('Token validation failed');
+  }
+
+  const userInfo = await res.json();
+  setToken(token);
+  localStorage.setItem('tss_stream_user', JSON.stringify(userInfo));
+}
+
 export function logout(): void {
   clearToken();
-  window.location.href = '/';
+  localStorage.removeItem('tss_stream_user');
+  window.location.href = 'https://tss-portal.com';
 }
