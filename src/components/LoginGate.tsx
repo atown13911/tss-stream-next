@@ -59,21 +59,12 @@ export default function LoginGate({ children }: { children: ReactNode }) {
   }
 
   if (!authenticated) {
+    if (typeof window !== 'undefined') {
+      window.location.href = 'https://tss-portal.com';
+    }
     return (
-      <div className="min-h-screen bg-[#0f0f0f] flex items-center justify-center px-4">
-        <div className="text-center">
-          <div className="inline-flex items-center justify-center h-14 w-14 rounded-xl bg-blue-600 mb-4">
-            <span className="material-icons-round text-white text-2xl">play_circle</span>
-          </div>
-          <h1 className="text-2xl font-bold text-white mb-2">TSS Stream</h1>
-          <p className="text-zinc-500 text-sm mb-6">Sign in with Taylor Access to continue</p>
-          <button
-            onClick={() => redirectToSSO()}
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors cursor-pointer"
-          >
-            Sign In with Taylor Access
-          </button>
-        </div>
+      <div className="min-h-screen bg-[#0f0f0f] flex items-center justify-center">
+        <p className="text-zinc-500 text-sm animate-pulse">Redirecting to portal...</p>
       </div>
     );
   }
