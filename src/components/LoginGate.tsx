@@ -1,9 +1,16 @@
 'use client';
 
 import { useState, useEffect, ReactNode } from 'react';
-import { getToken, isTokenExpired, clearToken, exchangeCode, handleTokenHandoff, hasValidToken } from '@/lib/auth';
+import {
+  getToken,
+  clearToken,
+  exchangeCode,
+  handleTokenHandoff,
+  hasValidToken,
+  ensureUserInfo,
+} from '@/lib/auth';
 
-export default function LoginGate({ children }: { children: ReactNode }) {
+export function useAuthGate() {
   const [authenticated, setAuthenticated] = useState(false);
   const [checking, setChecking] = useState(true);
   const [error, setError] = useState('');
@@ -13,14 +20,19 @@ export default function LoginGate({ children }: { children: ReactNode }) {
     const tokenParam = params.get('token');
     const code = params.get('code');
 
+    const finish = async () => {
+      await ensureUserInfo();
+      setAuthenticated(true);
+      setChecking(false);
+    };
+
     if (tokenParam) {
       handleTokenHandoff(tokenParam)
         .then(() => {
-          window.history.replaceState({}, '', '/');
-          setAuthenticated(true);
-          setChecking(false);
+          window.history.replaceState({}, '', window.location.pathname);
+          finish();
         })
-        .catch((err) => {
+        .catch((err: Error) => {
           setError(err.message);
           setChecking(false);
         });
@@ -30,11 +42,10 @@ export default function LoginGate({ children }: { children: ReactNode }) {
     if (code) {
       exchangeCode(code)
         .then(() => {
-          window.history.replaceState({}, '', '/');
-          setAuthenticated(true);
-          setChecking(false);
+          window.history.replaceState({}, '', window.location.pathname);
+          finish();
         })
-        .catch((err) => {
+        .catch((err: Error) => {
           setError(err.message);
           setChecking(false);
         });
@@ -42,14 +53,19 @@ export default function LoginGate({ children }: { children: ReactNode }) {
     }
 
     if (hasValidToken()) {
-      setAuthenticated(true);
-      setChecking(false);
+      finish();
       return;
     }
 
     clearToken();
     setChecking(false);
   }, []);
+
+  return { authenticated, checking, error };
+}
+
+export default function LoginGate({ children }: { children: ReactNode }) {
+  const { authenticated, checking, error } = useAuthGate();
 
   if (checking) {
     return (
@@ -64,7 +80,10 @@ export default function LoginGate({ children }: { children: ReactNode }) {
       <div className="min-h-screen bg-[#0f0f0f] flex items-center justify-center px-4">
         <div className="text-center">
           <p className="text-red-400 text-sm mb-4">{error}</p>
-          <button onClick={() => { window.location.href = 'https://tss-portal.com'; }} className="text-blue-400 text-sm hover:underline cursor-pointer">
+          <button
+            onClick={() => { window.location.href = 'https://tss-portal.com'; }}
+            className="text-blue-400 text-sm hover:underline cursor-pointer"
+          >
             Return to Portal
           </button>
         </div>

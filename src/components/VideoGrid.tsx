@@ -5,7 +5,7 @@ export default function VideoGrid({ videos }: { videos: Video[] }) {
   return (
     <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-5 mb-10">
       {videos.map(v => (
-        <Link href={`/watch/${v.id}`} key={v.id} className="group bg-[var(--bg-card)] rounded-xl overflow-hidden border border-transparent hover:border-[var(--border-light)] hover:-translate-y-1 hover:shadow-lg transition-all">
+        <Link href={`/watch?id=${v.id}`} key={v.id} className="group bg-[var(--bg-card)] rounded-xl overflow-hidden border border-transparent hover:border-[var(--border-light)] hover:-translate-y-1 hover:shadow-lg transition-all">
           <div className="relative w-full aspect-video overflow-hidden bg-[var(--bg-surface)]">
             <img src={v.thumb} alt={v.title} loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
             {v.live && <span className="absolute top-2 left-2 bg-red-500 text-white px-2 py-0.5 rounded text-[0.7rem] font-bold uppercase tracking-wide">LIVE</span>}

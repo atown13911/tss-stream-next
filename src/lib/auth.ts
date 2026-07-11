@@ -3,6 +3,17 @@ const SSO_UI = 'https://taylor-access.com';
 const CLIENT_ID = 'ta_tss_stream';
 const CLIENT_SECRET = 'tss-stream-sso-secret-2026';
 const TOKEN_KEY = 'tss_stream_token';
+const USER_KEY = 'tss_stream_user';
+
+export interface StreamUser {
+  sub?: string;
+  email?: string;
+  name?: string;
+  given_name?: string;
+  family_name?: string;
+  preferred_username?: string;
+  roles?: string[];
+}
 
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -17,6 +28,40 @@ export function clearToken(): void {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem('tss_stream_refresh');
   localStorage.removeItem('sso_state');
+  localStorage.removeItem(USER_KEY);
+}
+
+export function getUserInfo(): StreamUser | null {
+  if (typeof window === 'undefined') return null;
+  const raw = localStorage.getItem(USER_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as StreamUser;
+  } catch {
+    return null;
+  }
+}
+
+export function getUserDisplayName(): string {
+  const user = getUserInfo();
+  if (user?.name) return user.name;
+  if (user?.given_name) return user.given_name;
+  if (user?.email) return user.email.split('@')[0];
+  return 'User';
+}
+
+export function getUserEmail(): string {
+  return getUserInfo()?.email || '';
+}
+
+export function getUserInitials(): string {
+  const name = getUserDisplayName();
+  return name
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2) || 'U';
 }
 
 export function isTokenExpired(token: string): boolean {
@@ -66,8 +111,19 @@ export async function exchangeCode(code: string): Promise<string> {
 
   setToken(accessToken);
   if (refreshToken) localStorage.setItem('tss_stream_refresh', refreshToken);
+  await fetchAndStoreUserInfo(accessToken);
 
   return accessToken;
+}
+
+async function fetchAndStoreUserInfo(token: string): Promise<void> {
+  const res = await fetch(`${SSO_BASE}/oauth/userinfo`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.ok) {
+    const userInfo = await res.json();
+    localStorage.setItem(USER_KEY, JSON.stringify(userInfo));
+  }
 }
 
 export function hasValidToken(): boolean {
@@ -87,11 +143,16 @@ export async function handleTokenHandoff(token: string): Promise<void> {
 
   const userInfo = await res.json();
   setToken(token);
-  localStorage.setItem('tss_stream_user', JSON.stringify(userInfo));
+  localStorage.setItem(USER_KEY, JSON.stringify(userInfo));
+}
+
+export async function ensureUserInfo(): Promise<void> {
+  if (getUserInfo() || !hasValidToken()) return;
+  const token = getToken();
+  if (token) await fetchAndStoreUserInfo(token);
 }
 
 export function logout(): void {
   clearToken();
-  localStorage.removeItem('tss_stream_user');
   window.location.href = 'https://tss-portal.com';
 }

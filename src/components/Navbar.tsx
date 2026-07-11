@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState, useRef, useEffect } from 'react';
-import { logout } from '@/lib/auth';
+import { logout, getUserDisplayName, getUserEmail, getUserInitials, ensureUserInfo } from '@/lib/auth';
 
 const notifications = [
   { icon: 'person_add', text: '<strong>Mike Reynolds</strong> just joined TSS Stream', time: '2 min ago', unread: true },
@@ -16,8 +16,19 @@ export default function Navbar({ onMenuToggle }: { onMenuToggle: () => void }) {
   const [notifOpen, setNotifOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
   const [unread, setUnread] = useState(notifications.filter(n => n.unread).length);
+  const [displayName, setDisplayName] = useState('User');
+  const [email, setEmail] = useState('');
+  const [initials, setInitials] = useState('U');
   const notifRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    ensureUserInfo().then(() => {
+      setDisplayName(getUserDisplayName());
+      setEmail(getUserEmail());
+      setInitials(getUserInitials());
+    });
+  }, []);
 
   useEffect(() => {
     const handler = () => { setNotifOpen(false); setUserOpen(false); };
@@ -91,15 +102,15 @@ export default function Navbar({ onMenuToggle }: { onMenuToggle: () => void }) {
         <div className="relative" ref={userRef}>
           <button onClick={(e) => { e.stopPropagation(); setNotifOpen(false); setUserOpen(!userOpen); }}
             className="w-9 h-9 rounded-full bg-gradient-to-br from-sky-500 to-violet-500 flex items-center justify-center text-xs font-bold text-white cursor-pointer ml-1">
-            TA
+            {initials}
           </button>
           {userOpen && (
             <div className="absolute top-full right-0 mt-2 w-[280px] bg-[var(--bg-secondary)] border border-[var(--border)] rounded-xl shadow-2xl z-50 overflow-hidden" onClick={e => e.stopPropagation()}>
               <div className="flex items-center gap-3 p-4">
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-sky-500 to-violet-500 flex items-center justify-center text-base font-bold text-white">TA</div>
+                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-sky-500 to-violet-500 flex items-center justify-center text-base font-bold text-white">{initials}</div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-bold text-[0.95rem]">Austin Taylor</div>
-                  <div className="text-xs text-slate-500 truncate">austin.taylor@taylorshipping.com</div>
+                  <div className="font-bold text-[0.95rem]">{displayName}</div>
+                  <div className="text-xs text-slate-500 truncate">{email || 'Signed in via TSS Portal'}</div>
                 </div>
               </div>
               <hr className="border-[var(--border)]" />
