@@ -1,4 +1,6 @@
-const SSO_BASE = 'https://taylor-accesscom-production.up.railway.app';
+const SSO_GATEWAY =
+  'https://ttac-gateway-production.up.railway.app/api/v1/open/taylor-access';
+const SSO_BASE = SSO_GATEWAY;
 const SSO_UI = 'https://taylor-access.com';
 const CLIENT_ID = 'ta_tss_stream';
 const CLIENT_SECRET = 'tss-stream-sso-secret-2026';
@@ -12,6 +14,7 @@ export interface StreamUser {
   given_name?: string;
   family_name?: string;
   preferred_username?: string;
+  role?: string;
   roles?: string[];
 }
 
@@ -66,10 +69,10 @@ export function getUserInitials(): string {
 
 export function isTokenExpired(token: string): boolean {
   try {
-    const payload = token.split('.')[1];
-    const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
-    if (!decoded.exp) return false;
-    return decoded.exp * 1000 < Date.now();
+    const payload = decodeJwtPayload(token);
+    const exp = payload?.exp;
+    if (typeof exp !== 'number') return false;
+    return exp * 1000 < Date.now();
   } catch {
     return true;
   }
@@ -111,18 +114,74 @@ export async function exchangeCode(code: string): Promise<string> {
 
   setToken(accessToken);
   if (refreshToken) localStorage.setItem('tss_stream_refresh', refreshToken);
-  await fetchAndStoreUserInfo(accessToken);
+  await storeUserInfoFromToken(accessToken);
 
   return accessToken;
 }
 
-async function fetchAndStoreUserInfo(token: string): Promise<void> {
-  const res = await fetch(`${SSO_BASE}/oauth/userinfo`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (res.ok) {
-    const userInfo = await res.json();
-    localStorage.setItem(USER_KEY, JSON.stringify(userInfo));
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const payload = token.split('.')[1];
+    if (!payload) return null;
+    const b64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+    return JSON.parse(atob(padded)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function userInfoFromClaims(claims: Record<string, unknown>): StreamUser | null {
+  const NS = 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/';
+  const NS_MS = 'http://schemas.microsoft.com/ws/2008/06/identity/claims/';
+
+  const email =
+    (claims.email as string) ||
+    (claims[NS + 'emailaddress'] as string) ||
+    (claims[NS + 'email'] as string) ||
+    '';
+
+  const name =
+    (claims.name as string) ||
+    (claims[NS + 'name'] as string) ||
+    (claims[NS + 'givenname'] as string) ||
+    email.split('@')[0] ||
+    'User';
+
+  if (!email) return null;
+
+  const sub =
+    (claims.userId as string) ||
+    (claims.sub as string) ||
+    (claims[NS + 'nameidentifier'] as string) ||
+    '';
+
+  const role =
+    (claims.role as string) ||
+    (claims[NS_MS + 'role'] as string) ||
+    undefined;
+
+  return { sub, email, name, role };
+}
+
+async function storeUserInfoFromToken(token: string): Promise<void> {
+  const claims = decodeJwtPayload(token);
+  const fromJwt = claims ? userInfoFromClaims(claims) : null;
+  if (fromJwt) {
+    localStorage.setItem(USER_KEY, JSON.stringify(fromJwt));
+    return;
+  }
+
+  try {
+    const res = await fetch(`${SSO_BASE}/oauth/userinfo`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) {
+      const userInfo = await res.json();
+      localStorage.setItem(USER_KEY, JSON.stringify(userInfo));
+    }
+  } catch {
+    /* optional enrichment only */
   }
 }
 
@@ -132,24 +191,23 @@ export function hasValidToken(): boolean {
   return !isTokenExpired(token);
 }
 
+/** Portal tile launch — token is issued by TSS Portal, decode locally (no API round-trip). */
 export async function handleTokenHandoff(token: string): Promise<void> {
-  const res = await fetch(`${SSO_BASE}/oauth/userinfo`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const claims = decodeJwtPayload(token);
+  const user = claims ? userInfoFromClaims(claims) : null;
 
-  if (!res.ok) {
-    throw new Error('Token validation failed');
+  if (!user?.email) {
+    throw new Error('Could not read your identity from the Portal token. Please try again.');
   }
 
-  const userInfo = await res.json();
   setToken(token);
-  localStorage.setItem(USER_KEY, JSON.stringify(userInfo));
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
 }
 
 export async function ensureUserInfo(): Promise<void> {
   if (getUserInfo() || !hasValidToken()) return;
   const token = getToken();
-  if (token) await fetchAndStoreUserInfo(token);
+  if (token) await storeUserInfoFromToken(token);
 }
 
 export function logout(): void {
