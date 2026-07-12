@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="TSS Stream">
+  <rect width="32" height="32" rx="8" fill="#0a0e17"/>
+  <path fill="#0ea5e9" d="M6 22h20l-2.5-4H8.5L6 22zm3.2-6 4.8-7.2L19 16h-9.8z"/>
+  <path fill="#38bdf8" d="M16 4v3.5l3.5 2.1-1.2 2-4.3-2.6V4z"/>
+</svg>
